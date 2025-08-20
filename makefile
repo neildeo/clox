@@ -22,5 +22,5 @@ vm.o: vm.c vm.h common.h compiler.h debug.h
 scanner.o: scanner.c scanner.h common.h
 	gcc -c scanner.c
 
-compiler.o: compiler.c compiler.h common.h scanner.h
+compiler.o: compiler.c compiler.h common.h scanner.h debug.h
 	gcc -c compiler.c

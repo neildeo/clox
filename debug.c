@@ -6,6 +6,7 @@
 static int simpleInstruction(const char *name, int offset);
 static int constantInstruction(const char *name, Chunk *chunk, int offset);
 
+/* Prints a disassembled chunk under the user-specified name */
 void disassembleChunk(Chunk *chunk, const char *name)
 {
     printf("== %s ==\n", name);

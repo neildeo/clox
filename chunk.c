@@ -35,6 +35,11 @@ void writeChunk(Chunk *chunk, uint8_t byte, int line)
     chunk->count++;
 }
 
+/*
+Write a constant to the chunk with the specified value
+- Writes the value to the value array
+- Inserts the value's index into the chunk
+*/
 int addConstant(Chunk *chunk, Value value)
 {
     writeValueArray(&chunk->constants, value);
