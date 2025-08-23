@@ -19,9 +19,13 @@ static void resetStack()
 void initVM()
 {
     resetStack();
+    vm.objects = NULL;
 }
 
-void freeVM() {}
+void freeVM()
+{
+    freeObjects();
+}
 
 /*
 Pushes the given value onto the VM's stack
