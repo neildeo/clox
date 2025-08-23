@@ -1,5 +1,5 @@
-clox: main.o chunk.o memory.o debug.o value.o vm.o scanner.o compiler.o
-	gcc -o clox main.o chunk.o memory.o debug.o value.o vm.o scanner.o compiler.o
+clox: main.o chunk.o memory.o debug.o value.o vm.o scanner.o compiler.o object.o
+	gcc -o clox main.o chunk.o memory.o debug.o value.o vm.o scanner.o compiler.o object.o
 
 main.o: main.c common.h chunk.h
 	gcc -c main.c
@@ -24,3 +24,6 @@ scanner.o: scanner.c scanner.h common.h
 
 compiler.o: compiler.c compiler.h common.h scanner.h debug.h
 	gcc -c compiler.c
+
+object.o: object.c object.h
+	gcc -c object.c
