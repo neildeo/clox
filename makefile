@@ -25,5 +25,5 @@ scanner.o: scanner.c scanner.h common.h
 compiler.o: compiler.c compiler.h common.h scanner.h debug.h
 	gcc -c compiler.c
 
-object.o: object.c object.h
+object.o: object.c object.h memory.h value.h vm.h
 	gcc -c object.c
