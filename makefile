@@ -13,10 +13,10 @@ memory.o: memory.c memory.h common.h
 debug.o: debug.c debug.h value.h
 	gcc -c debug.c
 
-value.o: value.c value.h memory.h common.h
+value.o: value.c value.h memory.h common.h object.h
 	gcc -c value.c
 
-vm.o: vm.c vm.h common.h compiler.h debug.h 
+vm.o: vm.c vm.h common.h compiler.h debug.h memory.h object.h
 	gcc -c vm.c
 
 scanner.o: scanner.c scanner.h common.h
