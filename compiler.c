@@ -434,6 +434,13 @@ static void printStatement()
     emitByte(OP_PRINT);
 }
 
+static void expressionStatement()
+{
+    expression();
+    consume(TOKEN_SEMICOLON, "Expect ';' after expression.");
+    emitByte(OP_POP);
+}
+
 static void declaration()
 {
     statement();
@@ -444,5 +451,9 @@ static void statement()
     if (match(TOKEN_PRINT))
     {
         printStatement();
+    }
+    else
+    {
+        expressionStatement();
     }
 }
