@@ -1,0 +1,12 @@
+{
+  "files.associations": {
+    "*.rs": "rust",
+    "*.h": "c",
+    "__config": "c",
+    "__hash_table": "c",
+    "deque": "c",
+    "locale": "c",
+    "string": "c",
+    "algorithm": "c"
+  }
+}
