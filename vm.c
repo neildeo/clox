@@ -196,6 +196,9 @@ static InterpretResult run()
             printf("\n");
             break;
         }
+        case OP_RETURN:
+            // Exit interpreter.
+            return INTERPRET_OK;
         }
     }
 
