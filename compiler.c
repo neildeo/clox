@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "common.h"
 #include "compiler.h"
@@ -41,8 +42,21 @@ typedef struct
     Precedence precedence;
 } ParseRule;
 
-Parser parser;
+typedef struct
+{
+    Token name;
+    int depth;
+} Local;
 
+typedef struct
+{
+    Local locals[UINT8_COUNT];
+    int localCount;
+    int scopeDepth;
+} Compiler;
+
+Parser parser;
+Compiler *current = NULL;
 Chunk *compilingChunk;
 
 static Chunk *currentChunk();
@@ -67,6 +81,16 @@ static void literal(bool canAssign);
 // Statements
 static void statement();
 static void declaration();
+static void block();
+
+// Parser and compiler behaviour
+
+static void initCompiler(Compiler *compiler)
+{
+    compiler->localCount = 0;
+    compiler->scopeDepth = 0;
+    current = compiler;
+}
 
 /*
 Compile a new expression chunk from source
@@ -76,6 +100,8 @@ Compile a new expression chunk from source
 bool compile(const char *source, Chunk *chunk)
 {
     initScanner(source);
+    Compiler compiler;
+    initCompiler(&compiler);
 
     compilingChunk = chunk;
 
@@ -92,11 +118,6 @@ bool compile(const char *source, Chunk *chunk)
     endCompiler();
 
     return !parser.hadError;
-}
-
-static void expression()
-{
-    parsePrecedence(PREC_ASSIGNMENT);
 }
 
 static Chunk *currentChunk()
@@ -130,7 +151,7 @@ static void errorAt(Token *token, const char *message)
     parser.hadError = true;
 }
 
-/* Generate an error at the parser's previous token with the specified message. */
+/* Generate a compile time error at the parser's previous token with the specified message. */
 static void error(const char *message)
 {
     errorAt(&parser.previous, message);
@@ -252,6 +273,25 @@ static void endCompiler()
 #endif
 }
 
+static void beginScope()
+{
+    current->scopeDepth++;
+}
+
+static void endScope()
+{
+    current->scopeDepth--;
+
+    while (current->localCount > 0 &&
+           current->locals[current->localCount - 1].depth > current->scopeDepth)
+    {
+        emitByte(OP_POP);
+        current->localCount--;
+    }
+}
+
+// Parsing
+
 ParseRule rules[] = {
     [TOKEN_LEFT_PAREN] = {grouping, NULL, PREC_NONE},
     [TOKEN_RIGHT_PAREN] = {NULL, NULL, PREC_NONE},
@@ -332,6 +372,11 @@ static ParseRule *getRule(TokenType type)
 }
 
 // EXPRESSIONS
+static void expression()
+{
+    parsePrecedence(PREC_ASSIGNMENT);
+}
+
 /* Parse a binary expression */
 static void binary(bool canAssign)
 {
@@ -430,10 +475,94 @@ static uint8_t identifierConstant(Token *name)
     return makeConstant(OBJ_VAL(copyString(name->start, name->length)));
 }
 
+static bool identifiersEqual(Token *a, Token *b)
+{
+    if (a->length != b->length)
+        return false;
+    return memcmp(a->start, b->start, a->length) == 0;
+}
+
+static int resolveLocal(Compiler *compiler, Token *name)
+{
+    for (int i = compiler->localCount - 1; i >= 0; i--)
+    {
+        Local *local = &compiler->locals[i];
+        if (identifiersEqual(name, &local->name))
+        {
+            if (local->depth == -1)
+            {
+                error("Can't read local variable in its own initialiser.");
+            }
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+/*
+Add a local variable to the compiler
+- Adds local variable to the compiler's `locals` stack
+*/
+static void addLocal(Token name)
+{
+    if (current->localCount == UINT8_COUNT)
+    {
+        error("Too many local variables in function.");
+        return;
+    }
+
+    Local *local = &current->locals[current->localCount++];
+    local->name = name;
+    local->depth = -1;
+}
+
+/*
+Declare a variable, i.e. add it to the current scope
+- Checks we are in a non-global scope
+- Calls `addLocal` with the correct identifier token
+*/
+static void declareVariable()
+{
+    if (current->scopeDepth == 0)
+        return;
+
+    Token *name = &parser.previous;
+    for (int i = current->localCount - 1; i >= 0; i--)
+    {
+        Local *local = &current->locals[i];
+        // A depth of -1 signifies a declared but undefined variable
+        if (local->depth != -1 && local->depth < current->scopeDepth)
+        {
+            break;
+        }
+
+        if (identifiersEqual(name, &local->name))
+        {
+            error("Already a variable with this name in this scope.");
+        }
+    }
+
+    addLocal(*name);
+}
+
+/*
+Parse a variable
+*/
 static uint8_t parseVariable(const char *errorMessage)
 {
     consume(TOKEN_IDENTIFIER, errorMessage);
+
+    declareVariable();
+    if (current->scopeDepth > 0)
+        return 0;
+
     return identifierConstant(&parser.previous);
+}
+
+static void markInitialised()
+{
+    current->locals[current->localCount - 1].depth = current->scopeDepth;
 }
 
 /*
@@ -442,21 +571,39 @@ Write bytes to chunk to define a variable
 */
 static void defineVariable(uint8_t global)
 {
+    if (current->scopeDepth > 0)
+    {
+        markInitialised();
+        return;
+    }
+
     emitBytes(OP_DEFINE_GLOBAL, global);
 }
 
 static void namedVariable(Token name, bool canAssign)
 {
-    uint8_t arg = identifierConstant(&name);
+    uint8_t getOp, setOp;
+    int arg = resolveLocal(current, &name);
+    if (arg != -1) // This means the variable must be global (or undefined)
+    {
+        getOp = OP_GET_LOCAL;
+        setOp = OP_SET_LOCAL;
+    }
+    else
+    {
+        arg = identifierConstant(&name);
+        getOp = OP_GET_GLOBAL;
+        setOp = OP_SET_GLOBAL;
+    }
 
     if (canAssign && match(TOKEN_EQUAL))
     {
         expression();
-        emitBytes(OP_SET_GLOBAL, arg);
+        emitBytes(setOp, (uint8_t)arg);
     }
     else
     {
-        emitBytes(OP_GET_GLOBAL, arg);
+        emitBytes(getOp, (uint8_t)arg);
     }
 }
 
@@ -574,8 +721,24 @@ static void statement()
     {
         printStatement();
     }
+    else if (match(TOKEN_LEFT_BRACE))
+    {
+        beginScope();
+        block();
+        endScope();
+    }
     else
     {
         expressionStatement();
     }
+}
+
+static void block()
+{
+    while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF))
+    {
+        declaration();
+    }
+
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
