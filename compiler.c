@@ -84,6 +84,10 @@ static void or_(bool canAssign);
 static void statement();
 static void declaration();
 static void block();
+static void printStatement();
+static void expressionStatement();
+static void ifStatement();
+static void whileStatement();
 
 // Parser and compiler behaviour
 
@@ -242,6 +246,21 @@ static int emitJump(uint8_t instruction)
     emitByte(0xff);
     emitByte(0xff);
     return currentChunk()->count - 2;
+}
+
+/*
+Write a loop instruction to the current chunk.
+*/
+static void emitLoop(int loopStart)
+{
+    emitByte(OP_LOOP);
+
+    int offset = currentChunk()->count - loopStart + 2;
+    if (offset > UINT16_MAX)
+        error("Loop body too large.");
+
+    emitByte((offset >> 8) & 0xff);
+    emitByte(offset & 0xff);
 }
 
 /* Write an OP_RETURN instruction byte to the current chunk. */
@@ -695,43 +714,47 @@ static void or_(bool canAssign)
 }
 
 // STATEMENTS
+static void statement()
+{
+    if (match(TOKEN_PRINT))
+    {
+        printStatement();
+    }
+    else if (match(TOKEN_IF))
+    {
+        ifStatement();
+    }
+    else if (match(TOKEN_WHILE))
+    {
+        whileStatement();
+    }
+    else if (match(TOKEN_LEFT_BRACE))
+    {
+        beginScope();
+        block();
+        endScope();
+    }
+    else
+    {
+        expressionStatement();
+    }
+}
+
+static void block()
+{
+    while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF))
+    {
+        declaration();
+    }
+
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
+}
+
 static void printStatement()
 {
     expression();
     consume(TOKEN_SEMICOLON, "Expect ';' after value.");
     emitByte(OP_PRINT);
-}
-
-/*
-Synchronise the parser after an error
-
-After a parse error, this function consumes tokens until the beginning of a new statement.
-*/
-static void synchronise()
-{
-    parser.panicMode = false;
-
-    while (parser.current.type != TOKEN_EOF)
-    {
-        if (parser.previous.type == TOKEN_SEMICOLON)
-            return;
-        switch (parser.current.type)
-        {
-        case TOKEN_CLASS:
-        case TOKEN_FUN:
-        case TOKEN_VAR:
-        case TOKEN_FOR:
-        case TOKEN_IF:
-        case TOKEN_WHILE:
-        case TOKEN_PRINT:
-        case TOKEN_RETURN:
-            return;
-
-        default:; // Do nothing.
-        }
-
-        advance();
-    }
 }
 
 static void varDeclaration()
@@ -778,6 +801,55 @@ static void ifStatement()
     patchJump(elseJump);
 }
 
+static void whileStatement()
+{
+    int loopStart = currentChunk()->count;
+
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
+    expression();
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+    int exitJump = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);
+    statement();
+    emitLoop(loopStart);
+
+    patchJump(exitJump);
+    emitByte(OP_POP);
+}
+
+/*
+Synchronise the parser after an error
+
+After a parse error, this function consumes tokens until the beginning of a new statement.
+*/
+static void synchronise()
+{
+    parser.panicMode = false;
+
+    while (parser.current.type != TOKEN_EOF)
+    {
+        if (parser.previous.type == TOKEN_SEMICOLON)
+            return;
+        switch (parser.current.type)
+        {
+        case TOKEN_CLASS:
+        case TOKEN_FUN:
+        case TOKEN_VAR:
+        case TOKEN_FOR:
+        case TOKEN_IF:
+        case TOKEN_WHILE:
+        case TOKEN_PRINT:
+        case TOKEN_RETURN:
+            return;
+
+        default:; // Do nothing.
+        }
+
+        advance();
+    }
+}
+
 static void declaration()
 {
     if (match(TOKEN_VAR))
@@ -791,36 +863,4 @@ static void declaration()
 
     if (parser.panicMode)
         synchronise();
-}
-
-static void statement()
-{
-    if (match(TOKEN_PRINT))
-    {
-        printStatement();
-    }
-    else if (match(TOKEN_IF))
-    {
-        ifStatement();
-    }
-    else if (match(TOKEN_LEFT_BRACE))
-    {
-        beginScope();
-        block();
-        endScope();
-    }
-    else
-    {
-        expressionStatement();
-    }
-}
-
-static void block()
-{
-    while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF))
-    {
-        declaration();
-    }
-
-    consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
