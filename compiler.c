@@ -48,8 +48,17 @@ typedef struct
     int depth;
 } Local;
 
+typedef enum
+{
+    TYPE_FUNCTION,
+    TYPE_SCRIPT
+} FunctionType;
+
 typedef struct
 {
+    ObjFunction *function;
+    FunctionType type;
+
     Local locals[UINT8_COUNT];
     int localCount;
     int scopeDepth;
@@ -57,13 +66,12 @@ typedef struct
 
 Parser parser;
 Compiler *current = NULL;
-Chunk *compilingChunk;
 
 static Chunk *currentChunk();
 static void advance();
 static void consume(TokenType type, const char *message);
 static bool match(TokenType type);
-static void endCompiler();
+ObjFunction *endCompiler();
 
 static void parsePrecedence(Precedence precedence);
 static ParseRule *getRule(TokenType type);
@@ -92,25 +100,30 @@ static void forStatement();
 
 // Parser and compiler behaviour
 
-static void initCompiler(Compiler *compiler)
+static void initCompiler(Compiler *compiler, FunctionType type)
 {
+    compiler->function = NULL;
+    compiler->type = type;
     compiler->localCount = 0;
     compiler->scopeDepth = 0;
+    compiler->function = newFunction();
     current = compiler;
+
+    Local *local = &current->locals[current->localCount++];
+    local->depth = 0;
+    local->name.start = "";
+    local->name.length = 0;
 }
 
 /*
-Compile a new expression chunk from source
-- Assumes that the source is just a single expression (for now)
-- Supports number literals, grouping, negation and arithmetic
+Compile bytecode from source
+- Returns a pointer to the function or script which has been compiled.
 */
-bool compile(const char *source, Chunk *chunk)
+ObjFunction *compile(const char *source)
 {
     initScanner(source);
     Compiler compiler;
-    initCompiler(&compiler);
-
-    compilingChunk = chunk;
+    initCompiler(&compiler, TYPE_SCRIPT);
 
     parser.hadError = false;
     parser.panicMode = false;
@@ -122,14 +135,14 @@ bool compile(const char *source, Chunk *chunk)
         declaration();
     }
 
-    endCompiler();
+    ObjFunction *function = endCompiler();
 
-    return !parser.hadError;
+    return parser.hadError ? NULL : function;
 }
 
 static Chunk *currentChunk()
 {
-    return compilingChunk;
+    return &current->function->chunk;
 }
 
 /* Generate an error at a particular token with the specified message */
@@ -316,15 +329,19 @@ static void patchJump(int offset)
 }
 
 /* Compiler teardown */
-static void endCompiler()
+ObjFunction *endCompiler()
 {
     emitReturn();
+    ObjFunction *function = current->function;
+
 #ifdef DEBUG_PRINT_CODE
     if (!parser.hadError)
     {
-        disassembleChunk(currentChunk(), "code");
+        disassembleChunk(currentChunk(), function->name != NULL ? function->name->chars : "<script>");
     }
 #endif
+
+    return function;
 }
 
 static void beginScope()
