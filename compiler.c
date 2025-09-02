@@ -100,6 +100,7 @@ static void expressionStatement();
 static void ifStatement();
 static void whileStatement();
 static void forStatement();
+static void returnStatement();
 
 // Parser and compiler behaviour
 
@@ -286,7 +287,7 @@ static void emitLoop(int loopStart)
     emitByte(offset & 0xff);
 }
 
-/* Write an OP_RETURN instruction byte to the current chunk. */
+/* In cases where an implicit return is required, write an OP_RETURN instruction byte to the current chunk. */
 static void emitReturn()
 {
     emitByte(OP_NIL);
@@ -790,6 +791,10 @@ static void statement()
     {
         ifStatement();
     }
+    else if (match(TOKEN_RETURN))
+    {
+        returnStatement();
+    }
     else if (match(TOKEN_WHILE))
     {
         whileStatement();
@@ -842,6 +847,25 @@ static void function(FunctionType type)
 
     ObjFunction *function = endCompiler();
     emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
+}
+
+static void returnStatement()
+{
+    if (current->type == TYPE_SCRIPT)
+    {
+        error("Can't return from top-level code.");
+    }
+
+    if (match(TOKEN_SEMICOLON))
+    {
+        emitReturn();
+    }
+    else
+    {
+        expression();
+        consume(TOKEN_SEMICOLON, "Expect ';' after return value.");
+        emitByte(OP_RETURN);
+    }
 }
 
 static void printStatement()
