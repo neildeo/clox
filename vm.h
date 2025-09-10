@@ -10,7 +10,7 @@
 
 typedef struct CallFrame
 {
-    ObjFunction *function;
+    ObjClosure *closure;
     u_int8_t *ip;
     Value *slots;
 } CallFrame;
