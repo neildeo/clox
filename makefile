@@ -10,7 +10,7 @@ chunk.o: chunk.c chunk.h memory.h common.h
 memory.o: memory.c memory.h common.h vm.h
 	gcc -c memory.c
 
-debug.o: debug.c debug.h value.h
+debug.o: debug.c debug.h object.h value.h
 	gcc -c debug.c
 
 value.o: value.c value.h memory.h common.h object.h
