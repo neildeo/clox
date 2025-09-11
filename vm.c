@@ -21,6 +21,7 @@ static void resetStack()
 {
     vm.stackTop = vm.stack;
     vm.frameCount = 0;
+    vm.openUpvalues = NULL;
 }
 
 // Needed in initVM
@@ -124,12 +125,50 @@ static bool callValue(Value callee, int argCount)
 }
 
 /*
-Captures the stack slot of a local upvalue (i.e. in the enclosing scope)
+Captures the stack slot of a local upvalue
 */
 static ObjUpvalue *captureUpvalue(Value *local)
 {
+    ObjUpvalue *prevUpvalue = NULL;
+    ObjUpvalue *upvalue = vm.openUpvalues;
+    while (upvalue != NULL && upvalue->location > local)
+    {
+        prevUpvalue = upvalue;
+        upvalue = upvalue->next;
+    }
+
+    if (upvalue != NULL && upvalue->location == local)
+    {
+        return upvalue;
+    }
+
     ObjUpvalue *createdUpvalue = newUpvalue(local);
+    createdUpvalue->next = upvalue;
+
+    if (prevUpvalue == NULL)
+    {
+        vm.openUpvalues = createdUpvalue;
+    }
+    else
+    {
+        prevUpvalue->next = createdUpvalue;
+    }
+
     return createdUpvalue;
+}
+
+/*
+Hoist closed-over upvalues to the heap
+*/
+static void closeUpvalues(Value *last)
+{
+    while (vm.openUpvalues != NULL && vm.openUpvalues->location >= last)
+    {
+        ObjUpvalue *upvalue = vm.openUpvalues;
+        upvalue->closed = *upvalue->location;
+        upvalue->location = &upvalue->closed;
+        vm.openUpvalues = upvalue->next;
+    }
 }
 
 static bool isFalsey(Value value)
@@ -414,9 +453,16 @@ static InterpretResult run()
             }
             break;
         }
+        case OP_CLOSE_UPVALUE:
+        {
+            closeUpvalues(vm.stackTop - 1);
+            pop();
+            break;
+        }
         case OP_RETURN:
         {
             Value result = pop();
+            closeUpvalues(frame->slots);
             vm.frameCount--;
 
             // frameCount == 0 when we exit the top-level script
