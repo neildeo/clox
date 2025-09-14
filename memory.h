@@ -27,6 +27,22 @@ and `newSize` parameters.
 exits the program with exit code 1.
 */
 void *reallocate(void *pointer, size_t oldSize, size_t newSize);
+
+/*
+Mark a Lox object as a GC root
+*/
+void markObject(Obj *object);
+
+/*
+Mark a Lox value as a GC root
+*/
+void markValue(Value value);
+
+/*
+Run garbage collection
+*/
+void collectGarbage();
+
 /*
 Frees the linked list of objects stored in the VM.
 */

@@ -27,9 +27,13 @@ typedef enum
     OBJ_UPVALUE,
 } ObjType;
 
+/*
+Header info for Lox objects
+*/
 struct Obj
 {
     ObjType type;
+    bool isMarked;
     struct Obj *next;
 };
 

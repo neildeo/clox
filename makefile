@@ -7,7 +7,7 @@ main.o: main.c common.h chunk.h
 chunk.o: chunk.c chunk.h memory.h common.h
 	gcc -c chunk.c
 
-memory.o: memory.c memory.h common.h vm.h
+memory.o: memory.c memory.h compiler.h common.h vm.h
 	gcc -c memory.c
 
 debug.o: debug.c debug.h object.h value.h
@@ -22,7 +22,7 @@ vm.o: vm.c vm.h common.h compiler.h debug.h memory.h object.h
 scanner.o: scanner.c scanner.h common.h
 	gcc -c scanner.c
 
-compiler.o: compiler.c compiler.h common.h scanner.h debug.h
+compiler.o: compiler.c compiler.h common.h memory.h scanner.h debug.h
 	gcc -c compiler.c
 
 object.o: object.c object.h memory.h table.h value.h vm.h
